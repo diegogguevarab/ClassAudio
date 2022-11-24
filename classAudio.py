@@ -16,6 +16,7 @@ import os
 import librosa
 import librosa.display
 import seaborn as sns
+import datetime
 sns.set_style('whitegrid')
 warnings.filterwarnings("ignore")
 
@@ -32,24 +33,26 @@ three_df = pd.read_csv('./features_3_sec.csv')
 og_df = pd.concat([thirty_df, three_df])
 genres = og_df['label'].unique()
 
+
 def descriptionGraph(path):
     fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(15, 20))
     # Waveshow
     data, sampling_rate = librosa.load(path)
     librosa.display.waveshow(y=data, sr=sampling_rate,
-                         color="#A300F9", ax=axes[0][0])
+                             color="#A300F9", ax=axes[0][0])
     axes[0][0].set_title('Waveshow')
     #print("Data:", data)
 
     # Zero Crossing Rate
     zero_crossing_rate = librosa.feature.zero_crossing_rate(
-    y=data, hop_length=hop_length)[0]
+        y=data, hop_length=hop_length)[0]
     axes[0][1].plot(zero_crossing_rate, color="#A300F9")
     axes[0][1].set_title("Zero Crossing Rate")
     #print("Zero Crossing Rate:", zero_crossing_rate)
 
     # Short Time Fourier Transforms
-    stft_data = np.abs(librosa.stft(y=data, n_fft=n_fft, hop_length=hop_length))
+    stft_data = np.abs(librosa.stft(
+        y=data, n_fft=n_fft, hop_length=hop_length))
     axes[0][1].plot(stft_data, color="#A300F9")
     axes[0][1].set_title('STFT')
     #print("STFT:", stft_data)
@@ -57,15 +60,15 @@ def descriptionGraph(path):
     # Spectogram
     DB = librosa.amplitude_to_db(stft_data, ref=np.max)
     img = librosa.display.specshow(DB, sr=sampling_rate, hop_length=hop_length,
-                               x_axis='time', y_axis='log', cmap='cool', ax=axes[0][2])
+                                   x_axis='time', y_axis='log', cmap='cool', ax=axes[0][2])
     #print("DB:", DB)
 
     # Mel Spectogram
     mel_spec = librosa.feature.melspectrogram(
-    data, sr=sampling_rate, hop_length=hop_length)
+        data, sr=sampling_rate, hop_length=hop_length)
     mel_spec_db = librosa.amplitude_to_db(mel_spec, ref=np.max)
     img = librosa.display.specshow(mel_spec_db, sr=sampling_rate, hop_length=hop_length,
-                               x_axis='time', y_axis='log', cmap='cool', ax=axes[1][0])
+                                   x_axis='time', y_axis='log', cmap='cool', ax=axes[1][0])
     fig.colorbar(img, ax=axes[1][0])
     axes[1][0].set_title("Mel Spectogram")
     #print("Mel Spectogram:", mel_spec_db)
@@ -80,9 +83,9 @@ def descriptionGraph(path):
 
     # Chromagram
     chromagram = librosa.feature.chroma_stft(
-    data, sr=sampling_rate, hop_length=hop_length)
+        data, sr=sampling_rate, hop_length=hop_length)
     img = librosa.display.specshow(chromagram, x_axis='time', y_axis='chroma',
-                               hop_length=hop_length, cmap='coolwarm', ax=axes[1][2])
+                                   hop_length=hop_length, cmap='coolwarm', ax=axes[1][2])
     fig.colorbar(img, ax=axes[1][2])
     axes[1][2].set_title("Chromagram")
     #print("Chromagram:", chromagram)
@@ -104,14 +107,15 @@ def descriptionGraph(path):
 
     # Tempo and Beats
     tempo, beat_times = librosa.beat.beat_track(
-    y=data, sr=sampling_rate, units='time')
+        y=data, sr=sampling_rate, units='time')
     axes[2][1].vlines(beat_times, np.min(data), np.max(data), color='r')
     axes[2][1].set_title("(Tempo - " + str(round(tempo, 2)) + ")")
     #print("Tempo:", tempo)
     #print("Beats:", beat_times)
 
     # Spectral Rolloff
-    spectral_rolloff = librosa.feature.spectral_rolloff(data, sr=sampling_rate)[0]
+    spectral_rolloff = librosa.feature.spectral_rolloff(
+        data, sr=sampling_rate)[0]
     frames = range(len(spectral_rolloff))
     t = librosa.frames_to_time(frames)
     axes[2][2].plot(t, sklearn.preprocessing.minmax_scale(
@@ -135,6 +139,7 @@ def descriptionGraph(path):
 
     plt.tight_layout(pad=5)
     plt.savefig("Graphs.png")
+
 
 def training():
     # print(og_df.head(10))
@@ -196,9 +201,12 @@ def training():
     ]
 
     for i in range(len(classifier)):
+        print(datetime.datetime.now(), f'fitting {result_name[i][:-11]}...')
         clf = GridSearchCV(classifier[i], param_grid=classifier_params[i], cv=StratifiedKFold(
             n_splits=10), scoring='accuracy', n_jobs=-1, verbose=1)
         clf.fit(X_train, Y_train)
+        print(datetime.datetime.now(),
+              f'Done fitting {result_name[i][:-11]}...')
         y_pred = clf.predict(X_test)
         cv_result.append(clf.best_score_)
         best_estimator.append(clf.best_estimator_)
@@ -210,19 +218,21 @@ def training():
                                             ('svm', best_estimator[2]),
                                             ('knn', best_estimator[3])],
                                 voting='soft', n_jobs=-1)
+    print(datetime.datetime.now(), f'fitting {result_name[i][:-11]}...')
     voting_c = voting_c.fit(X_train, Y_train)
+    print(datetime.datetime.now(), f'Done fitting {result_name[i][:-11]}...')
     y_prediction = voting_c.predict(X_test)
     best_estimator.append(voting_c)
     plot_cm('Ensemble Learning', Y_test, y_prediction)
 
-    """ 
     cv_results = pd.DataFrame({'Cross Validation Means': cv_result, 'ML Models': [
-                          'MLP Classifier', 'RandomForestClassifier', 'SVM', 'KNeighborsClassifier']})
+        'MLP Classifier', 'RandomForestClassifier', 'SVM', 'KNeighborsClassifier']})
     g = sns.barplot(y='Cross Validation Means', x='ML Models', data=cv_results)
     g.set_xlabel('Mean Accuracy')
     g.set_title('Cross Validation Scores')
-    plt.savefig("Results.png") 
-    """
+    plt.figure(figsize=(15, 20))
+    plt.savefig("Results.png")
+
 
 def plot_cm(model, y_true, y_pred):
     conf = confusion_matrix(y_true, y_pred)
@@ -236,9 +246,10 @@ def plot_cm(model, y_true, y_pred):
     plt.savefig(f'Confusion Matrix for {model}.png')
     print(classification_report(y_true, y_pred, target_names=genres))
 
+
 def predictions(path):
     predict_df = pd.DataFrame(data={"chroma_stft_mean": [], "chroma_stft_var": [], "rms_mean": [], "rms_var": [], "spectral_centroid_mean": [], "spectral_centroid_var": [], "spectral_bandwidth_mean": [], "spectral_bandwidth_var": [], "rolloff_mean": [], "rolloff_var": [], "zero_crossing_rate_mean": [], "zero_crossing_rate_var": [], "harmony_mean": [], "harmony_var": [], "perceptr_mean": [], "perceptr_var": [], "tempo": [], "mfcc1_mean": [], "mfcc1_var": [], "mfcc2_mean": [], "mfcc2_var": [], "mfcc3_mean": [], "mfcc3_var": [], "mfcc4_mean": [], "mfcc4_var": [], "mfcc5_mean": [
-], "mfcc5_var": [], "mfcc6_mean": [], "mfcc6_var": [], "mfcc7_mean": [], "mfcc7_var": [], "mfcc8_mean": [], "mfcc8_var": [], "mfcc9_mean": [], "mfcc9_var": [], "mfcc10_mean": [], "mfcc10_var": [], "mfcc11_mean": [], "mfcc11_var": [], "mfcc12_mean": [], "mfcc12_var": [], "mfcc13_mean": [], "mfcc13_var": [], "mfcc14_mean": [], "mfcc14_var": [], "mfcc15_mean": [], "mfcc15_var": [], "mfcc16_mean": [], "mfcc16_var": [], "mfcc17_mean": [], "mfcc17_var": [], "mfcc18_mean": [], "mfcc18_var": [], "mfcc19_mean": [], "mfcc19_var": [], "mfcc20_mean": [], "mfcc20_var": []})
+    ], "mfcc5_var": [], "mfcc6_mean": [], "mfcc6_var": [], "mfcc7_mean": [], "mfcc7_var": [], "mfcc8_mean": [], "mfcc8_var": [], "mfcc9_mean": [], "mfcc9_var": [], "mfcc10_mean": [], "mfcc10_var": [], "mfcc11_mean": [], "mfcc11_var": [], "mfcc12_mean": [], "mfcc12_var": [], "mfcc13_mean": [], "mfcc13_var": [], "mfcc14_mean": [], "mfcc14_var": [], "mfcc15_mean": [], "mfcc15_var": [], "mfcc16_mean": [], "mfcc16_var": [], "mfcc17_mean": [], "mfcc17_var": [], "mfcc18_mean": [], "mfcc18_var": [], "mfcc19_mean": [], "mfcc19_var": [], "mfcc20_mean": [], "mfcc20_var": []})
     data_predict, sampling_rate_predict = librosa.load(path)
     stft_predict = np.abs(librosa.stft(
         y=data_predict, n_fft=n_fft, hop_length=hop_length))
@@ -260,17 +271,21 @@ def predictions(path):
         mfcc_predict[5]), np.mean(mfcc_predict[6]), np.var(mfcc_predict[6]), np.mean(mfcc_predict[7]), np.var(mfcc_predict[7]), np.mean(mfcc_predict[8]), np.var(mfcc_predict[8]), np.mean(mfcc_predict[9]), np.var(mfcc_predict[9]), np.mean(mfcc_predict[10]), np.var(mfcc_predict[10]), np.mean(mfcc_predict[11]), np.var(mfcc_predict[11]), np.mean(mfcc_predict[12]), np.var(mfcc_predict[12]), np.mean(mfcc_predict[13]), np.var(mfcc_predict[13]), np.mean(mfcc_predict[14]), np.var(mfcc_predict[14]), np.mean(mfcc_predict[15]), np.var(mfcc_predict[15]), np.mean(mfcc_predict[16]), np.var(mfcc_predict[16]), np.mean(mfcc_predict[17]), np.var(mfcc_predict[17]), np.mean(mfcc_predict[18]), np.var(mfcc_predict[18]), np.mean(mfcc_predict[19]), np.var(mfcc_predict[19])]
     X_predict = scaler.fit_transform(
         np.array(predict_df.iloc[:, :], dtype=float))
+    print(datetime.datetime.now(), "Start predicting...")
     mlp_predict = best_estimator[0].predict(X_predict)
     rfc_predict = best_estimator[1].predict(X_predict)
     svm_predict = best_estimator[2].predict(X_predict)
     knn_predict = best_estimator[3].predict(X_predict)
     voting_predict = best_estimator[4].predict(X_predict)
+    print(datetime.datetime.now(), "Done predicting...")
     print("MLP:", le.inverse_transform(mlp_predict))
     print("Random Forest:", le.inverse_transform(rfc_predict))
     print("SVM:", le.inverse_transform(svm_predict))
     print("KNN:", le.inverse_transform(knn_predict))
     print("Todos:", le.inverse_transform(voting_predict))
 
+
+print(datetime.datetime.now(), "Start training...")
 training()
-print("Done training...")
+print(datetime.datetime.now(), "Done training...")
 predictions("./Data/genres_original/metal/metal.00017.wav")
