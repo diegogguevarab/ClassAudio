@@ -17,6 +17,8 @@ import librosa
 import librosa.display
 import seaborn as sns
 import datetime
+import joblib
+import pprint
 sns.set_style('whitegrid')
 warnings.filterwarnings("ignore")
 
@@ -32,6 +34,12 @@ thirty_df = pd.read_csv('./features_30_sec.csv')
 three_df = pd.read_csv('./features_3_sec.csv')
 og_df = pd.concat([thirty_df, three_df])
 genres = og_df['label'].unique()
+work_df = og_df.drop(columns=['filename', 'length'])
+labels = work_df.label
+Y = le.fit_transform(labels)
+X = scaler.fit_transform(np.array(work_df.iloc[:, :-1], dtype=float))
+X_train, X_test, Y_train, Y_test = train_test_split(
+    X, Y, test_size=0.25, random_state=42)
 
 
 def descriptionGraph(path):
@@ -143,14 +151,6 @@ def descriptionGraph(path):
 
 def training():
     # print(og_df.head(10))
-    work_df = og_df.drop(columns=['filename', 'length'])
-    labels = work_df.label
-    Y = le.fit_transform(labels)
-
-    X = scaler.fit_transform(np.array(work_df.iloc[:, :-1], dtype=float))
-    X_train, X_test, Y_train, Y_test = train_test_split(
-        X, Y, test_size=0.25, random_state=42)
-
     random_state = 42
     classifier = [
         MLPClassifier(),
@@ -224,13 +224,12 @@ def training():
     y_prediction = voting_c.predict(X_test)
     best_estimator.append(voting_c)
     plot_cm('Ensemble Learning', Y_test, y_prediction)
-
+    plt.figure(figsize=(15, 20))
     cv_results = pd.DataFrame({'Cross Validation Means': cv_result, 'ML Models': [
         'MLP Classifier', 'RandomForestClassifier', 'SVM', 'KNeighborsClassifier']})
     g = sns.barplot(y='Cross Validation Means', x='ML Models', data=cv_results)
     g.set_xlabel('Mean Accuracy')
     g.set_title('Cross Validation Scores')
-    plt.figure(figsize=(15, 20))
     plt.savefig("Results.png")
 
 
@@ -269,23 +268,53 @@ def predictions(path):
         data_predict, sr=sampling_rate_predict))
     predict_df.loc[0] = [np.mean(stft_predict), np.var(stft_predict), np.mean(rms_predict), np.var(rms_predict), np.mean(spectral_centroids_predict), np.var(spectral_centroids_predict), np.mean(spec_bw_predict), np.var(spec_bw_predict), np.mean(spectral_rolloff_predict), np.var(spectral_rolloff_predict), np.mean(zero_crossing_rate_predict), np.var(zero_crossing_rate_predict), np.mean(y_harm_predict), np.var(y_harm_predict), np.mean(y_perc_predict), np.var(y_perc_predict), tempo_predict, np.mean(mfcc_predict[0]), np.var(mfcc_predict[0]), np.mean(mfcc_predict[1]), np.var(mfcc_predict[1]), np.mean(mfcc_predict[2]), np.var(mfcc_predict[2]), np.mean(mfcc_predict[3]), np.var(mfcc_predict[3]), np.mean(mfcc_predict[4]), np.var(mfcc_predict[4]), np.mean(mfcc_predict[5]), np.var(
         mfcc_predict[5]), np.mean(mfcc_predict[6]), np.var(mfcc_predict[6]), np.mean(mfcc_predict[7]), np.var(mfcc_predict[7]), np.mean(mfcc_predict[8]), np.var(mfcc_predict[8]), np.mean(mfcc_predict[9]), np.var(mfcc_predict[9]), np.mean(mfcc_predict[10]), np.var(mfcc_predict[10]), np.mean(mfcc_predict[11]), np.var(mfcc_predict[11]), np.mean(mfcc_predict[12]), np.var(mfcc_predict[12]), np.mean(mfcc_predict[13]), np.var(mfcc_predict[13]), np.mean(mfcc_predict[14]), np.var(mfcc_predict[14]), np.mean(mfcc_predict[15]), np.var(mfcc_predict[15]), np.mean(mfcc_predict[16]), np.var(mfcc_predict[16]), np.mean(mfcc_predict[17]), np.var(mfcc_predict[17]), np.mean(mfcc_predict[18]), np.var(mfcc_predict[18]), np.mean(mfcc_predict[19]), np.var(mfcc_predict[19])]
-    X_predict = scaler.fit_transform(
-        np.array(predict_df.iloc[:, :], dtype=float))
-    print(datetime.datetime.now(), "Start predicting...")
+    # print(predict_df)
+    X_predict = scaler.transform(np.array(predict_df.iloc[:,:], dtype=float))
+    # print(X_predict)
+    print(datetime.datetime.now(), f'Start predicting {path}...')
     mlp_predict = best_estimator[0].predict(X_predict)
     rfc_predict = best_estimator[1].predict(X_predict)
     svm_predict = best_estimator[2].predict(X_predict)
     knn_predict = best_estimator[3].predict(X_predict)
     voting_predict = best_estimator[4].predict(X_predict)
-    print(datetime.datetime.now(), "Done predicting...")
     print("MLP:", le.inverse_transform(mlp_predict))
     print("Random Forest:", le.inverse_transform(rfc_predict))
     print("SVM:", le.inverse_transform(svm_predict))
     print("KNN:", le.inverse_transform(knn_predict))
     print("Todos:", le.inverse_transform(voting_predict))
+    print(datetime.datetime.now(), f'Done predicting {path}...')
 
 
-print(datetime.datetime.now(), "Start training...")
-training()
-print(datetime.datetime.now(), "Done training...")
-predictions("./Data/genres_original/metal/metal.00017.wav")
+def pack_up():
+    joblib.dump(best_estimator[0], 'MLP.pkl', compress=1)
+    joblib.dump(best_estimator[1], 'Random Forest.pkl', compress=1)
+    joblib.dump(best_estimator[2], 'SVM.pkl', compress=1)
+    joblib.dump(best_estimator[3], 'KNN.pkl', compress=1)
+    joblib.dump(best_estimator[4], 'Todos.pkl', compress=1)
+
+
+def unpack():
+    best_estimator.append(joblib.load('./MLP.pkl'))
+    best_estimator.append(joblib.load('./Random Forest.pkl'))
+    best_estimator.append(joblib.load('./SVM.pkl'))
+    best_estimator.append(joblib.load('./KNN.pkl'))
+    best_estimator.append(joblib.load('./Todos.pkl'))
+
+if not os.path.exists('Todos.pkl'):
+    print(datetime.datetime.now(), "Start training...")
+    training()
+    pack_up()
+    print(datetime.datetime.now(), "Done training...")
+else:
+    unpack()
+
+predictions(f'./Data/genres_original/blues/blues.000{np.random.randint(low=0,high=99)}.wav')
+predictions(f'./Data/genres_original/classical/classical.000{np.random.randint(low=0,high=99)}.wav')
+predictions(f'./Data/genres_original/country/country.000{np.random.randint(low=0,high=99)}.wav')
+predictions(f'./Data/genres_original/disco/disco.000{np.random.randint(low=0,high=99)}.wav')
+predictions(f'./Data/genres_original/hiphop/hiphop.000{np.random.randint(low=0,high=99)}.wav')
+predictions(f'./Data/genres_original/jazz/jazz.000{np.random.randint(low=0,high=99)}.wav')
+predictions(f'./Data/genres_original/metal/metal.000{np.random.randint(low=0,high=99)}.wav')
+predictions(f'./Data/genres_original/pop/pop.000{np.random.randint(low=0,high=99)}.wav')
+predictions(f'./Data/genres_original/reggae/reggae.000{np.random.randint(low=0,high=99)}.wav')
+predictions(f'./Data/genres_original/rock/rock.000{np.random.randint(low=0,high=99)}.wav')
