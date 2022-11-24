@@ -5,3 +5,6 @@ librosa
 seaborn
 sklearn
 IPython
+tkinter
+pillow
+pyinstaller
